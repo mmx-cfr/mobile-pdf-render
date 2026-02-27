@@ -1,73 +1,67 @@
 import { chromium } from "playwright";
 import fs from "fs";
+import path from "path";
+import { PDFDocument } from "pdf-lib";
 
 const url = process.argv[2];
-if (!url) {
-  console.error("Usage: node make-mobile-pdf.mjs <url> [out.pdf]");
-  process.exit(1);
-}
+if (!url) { console.error("Usage: node make-mobile-pdf.mjs <url> [out.pdf]"); process.exit(1); }
+const outPath = process.argv[3] || "mobile.pdf";
 
-const outPath = process.argv[3] || "mobile-view.pdf";
-
-// iPhone 13-ish viewport
 const viewport = { width: 390, height: 844 };
 
-const extraCss = `
-  /* Keep colors/backgrounds when printing */
-  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-
-  /* Optional: remove sticky UI that can repeat on every page.
-     Uncomment if needed:
-  header, [data-sticky], .sticky, .is-sticky, .site-header { position: static !important; }
-  */
-`;
+const PRINT_CSS = `
+@media print {
+  #page-content ~ * { display:none !important; }
+  button[aria-label="Share this content"] { display:none !important; }
+  [aria-label="Share this content"] { display:none !important; }
+  .fixed.bottom-site-margin { display:none !important; }
+  * { -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
+}`;
 
 (async () => {
   const browser = await chromium.launch();
   const page = await browser.newPage({
-    viewport,
-    deviceScaleFactor: 3,
-    isMobile: true,
-    hasTouch: true,
-    userAgent:
-      "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1",
+    viewport, deviceScaleFactor:3, isMobile:true, hasTouch:true,
+    userAgent:"Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1"
   });
 
-  // Load page (networkidle helps ensure fonts/CSS load)
-  await page.goto(url, { waitUntil: "networkidle", timeout: 90000 });
+  await page.goto(url, { waitUntil:"networkidle", timeout:90000 });
+  await page.addStyleTag({ content: PRINT_CSS });
 
-  // Apply print-friendly tweaks (optional)
-  await page.addStyleTag({ content: extraCss });
-
-  // Trigger lazy-load content by scrolling
   await page.evaluate(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 600));
-    const step = 900;
-    const maxScrolls = 80; // safety cap
-    for (let i = 0; i < maxScrolls; i++) {
-      window.scrollBy(0, step);
-      await new Promise((r) => setTimeout(r, 180));
-      if (window.scrollY + window.innerHeight >= document.body.scrollHeight - 5) break;
+    await new Promise(r=>setTimeout(r,500));
+    const step=900;
+    for(let i=0;i<80;i++){
+      window.scrollBy(0,step);
+      await new Promise(r=>setTimeout(r,150));
+      if(window.scrollY+window.innerHeight>=document.body.scrollHeight-5) break;
     }
-    window.scrollTo(0, 0);
-    await new Promise((resolve) => setTimeout(resolve, 600));
+    window.scrollTo(0,0);
+    await new Promise(r=>setTimeout(r,500));
   });
 
-  // Multi-page PDF at mobile width
-  await page.pdf({
-    path: outPath,
-    printBackground: true,
-    preferCSSPageSize: true,
-    width: `${viewport.width}px`,
-    margin: { top: "16px", right: "16px", bottom: "16px", left: "16px" },
-  });
+  const pageTitle = await page.title();
 
-  await browser.close();
+  const coverPdfPath="cover.pdf";
+  const contentPdfPath="content.pdf";
 
-  if (!fs.existsSync(outPath)) {
-    console.error("PDF did not write. Check permissions.");
-    process.exit(2);
+  const coverPage = await browser.newPage({ viewport, deviceScaleFactor:3, isMobile:true, hasTouch:true });
+  const coverUrl = "file://" + path.resolve("./cover.html") + `?title=${encodeURIComponent(pageTitle)}&url=${encodeURIComponent(url)}`;
+  await coverPage.goto(coverUrl, { waitUntil:"networkidle" });
+
+  await coverPage.pdf({ path:coverPdfPath, printBackground:true, width:`${viewport.width}px`, margin:{top:"16px",right:"16px",bottom:"16px",left:"16px"} });
+
+  await page.pdf({ path:contentPdfPath, printBackground:true, preferCSSPageSize:true, width:`${viewport.width}px`, margin:{top:"16px",right:"16px",bottom:"16px",left:"16px"} });
+
+  const merged = await PDFDocument.create();
+  for (const f of [coverPdfPath, contentPdfPath]) {
+    const bytes = fs.readFileSync(f);
+    const doc = await PDFDocument.load(bytes);
+    const pages = await merged.copyPages(doc, doc.getPageIndices());
+    pages.forEach(p=>merged.addPage(p));
   }
 
-  console.log(`Saved: ${outPath}`);
+  fs.writeFileSync(outPath, await merged.save());
+  await browser.close();
+  console.log("Saved:", outPath);
 })();
