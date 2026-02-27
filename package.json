@@ -1,0 +1,13 @@
+{
+  "name": "mobile-pdf",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Generate a multi-page PDF of a webpage rendered in a mobile viewport using Playwright.",
+  "main": "make-mobile-pdf.mjs",
+  "scripts": {
+    "pdf": "node make-mobile-pdf.mjs"
+  },
+  "dependencies": {
+    "playwright": "^1.50.0"
+  }
+}
