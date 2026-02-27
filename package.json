@@ -1,12 +1,8 @@
 {
   "name": "mobile-pdf-render",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "type": "module",
-  "description": "Mobile viewport PDF renderer with cover page and CSS hide rules",
   "main": "make-mobile-pdf.mjs",
-  "scripts": {
-    "pdf": "node make-mobile-pdf.mjs"
-  },
   "dependencies": {
     "playwright": "^1.50.0",
     "pdf-lib": "^1.17.1"
