@@ -10,21 +10,29 @@ on:
         description: "Job ID"
         required: true
 
+permissions:
+  contents: write
+
 jobs:
   render:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm
 
       - name: Install deps
         run: |
-          npm install
+          npm ci
           npx playwright install --with-deps chromium
 
       - name: Mark job started
@@ -40,10 +48,13 @@ jobs:
         run: |
           echo "{\"status\":\"done\",\"pdf\":\"/jobs/${{ github.event.inputs.jobId }}.pdf\",\"jobId\":\"${{ github.event.inputs.jobId }}\"}" > "docs/jobs/${{ github.event.inputs.jobId }}.json"
 
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
       - name: Commit outputs
         run: |
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
           git add docs/jobs
-          git commit -m "Render PDF ${{ github.event.inputs.jobId }}" || echo "No changes"
-          git push
+          git diff --cached --quiet || git commit -m "Render PDF ${{ github.event.inputs.jobId }}"
+          git push origin HEAD:main
