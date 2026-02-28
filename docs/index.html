@@ -22,6 +22,9 @@
   <div class="status" id="status" style="display:none;"></div>
   <div class="small">Triggers GitHub Actions via a proxy (Cloudflare Worker) so the token stays secret.</div>
   <script>
+
+
+    
     const PAGES_BASE_URL = "https://mmx-cfr.github.io/mobile-pdf-render";
     const TRIGGER_ENDPOINT = "https://mobile-pdf-render.malimichaelx.workers.dev/render";
 
@@ -33,10 +36,14 @@
     function makeJobId() {
       return "job_" + Date.now() + "_" + Math.random().toString(16).slice(2);
     }
-    async function trigger(url, jobId) {
+    async function trigger(url, jobId) {      
       const r = await fetch(TRIGGER_ENDPOINT, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Basic " + btoa("mali:pdf123")
+        },
         body: JSON.stringify({ url, jobId })
       });
       if (!r.ok) throw new Error(await r.text());
