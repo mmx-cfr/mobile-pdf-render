@@ -1,1 +1,73 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mobile PDF Generator</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; padding: 24px; max-width: 760px; margin: 0 auto; }
+    label { display:block; margin-top: 12px; font-size: 14px; }
+    input { width: 100%; padding: 10px; font-size: 14px; box-sizing: border-box; }
+    button { margin-top: 16px; padding: 10px 14px; font-size: 14px; cursor: pointer; }
+    .status { margin-top: 16px; padding: 12px; background: #f5f5f5; border-radius: 10px; }
+    a { word-break: break-all; }
+    .small { font-size: 12px; opacity: .8; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <h1>Mobile PDF Generator</h1>
+  <label>URL</label>
+  <input id="url" placeholder="https://..." />
+  <button id="go">Generate PDF</button>
+  <div class="status" id="status" style="display:none;"></div>
+  <div class="small">Triggers GitHub Actions via a proxy (Cloudflare Worker) so the token stays secret.</div>
+  <script>
+    const PAGES_BASE_URL = "https://mmx-cfr.github.io/mobile-pdf-render";
+    const TRIGGER_ENDPOINT = "https://YOUR-WORKER.workers.dev/render"; // set this
 
+    function setStatus(html) {
+      const el = document.getElementById("status");
+      el.style.display = "block";
+      el.innerHTML = html;
+    }
+    function makeJobId() {
+      return "job_" + Date.now() + "_" + Math.random().toString(16).slice(2);
+    }
+    async function trigger(url, jobId) {
+      const r = await fetch(TRIGGER_ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url, jobId })
+      });
+      if (!r.ok) throw new Error(await r.text());
+      return r.json();
+    }
+    async function poll(jobId) {
+      const statusUrl = `${PAGES_BASE_URL}/jobs/${jobId}.json`;
+      const pdfUrl = `${PAGES_BASE_URL}/jobs/${jobId}.pdf`;
+      for (;;) {
+        const r = await fetch(statusUrl, { cache: "no-store" });
+        if (r.ok) {
+          const j = await r.json();
+          if (j.status === "done") {
+            setStatus(`Done. <a href="${pdfUrl}" target="_blank">Download PDF</a>`);
+            return;
+          }
+          setStatus(`Running…<br>Job ID: ${jobId}`);
+        } else {
+          setStatus(`Queued…<br>Job ID: ${jobId}`);
+        }
+        await new Promise(r => setTimeout(r, 4000));
+      }
+    }
+    document.getElementById("go").addEventListener("click", async () => {
+      const url = document.getElementById("url").value.trim();
+      if (!url) return;
+      const jobId = makeJobId();
+      setStatus("Starting…");
+      try { await trigger(url, jobId); await poll(jobId); }
+      catch(e){ setStatus("Error: " + e.message); }
+    });
+  </script>
+</body>
+</html>
