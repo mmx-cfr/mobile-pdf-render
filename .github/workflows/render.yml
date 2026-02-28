@@ -6,10 +6,9 @@ on:
       url:
         description: "URL to render"
         required: true
-      filename:
-        description: "Output PDF name"
-        required: false
-        default: "mobile.pdf"
+      jobId:
+        description: "Job ID"
+        required: true
 
 jobs:
   render:
@@ -28,12 +27,23 @@ jobs:
           npm install
           npx playwright install --with-deps chromium
 
+      - name: Mark job started
+        run: |
+          mkdir -p docs/jobs
+          echo "{\"status\":\"running\",\"url\":\"${{ github.event.inputs.url }}\",\"jobId\":\"${{ github.event.inputs.jobId }}\"}" > "docs/jobs/${{ github.event.inputs.jobId }}.json"
+
       - name: Render PDF
         run: |
-          node make-mobile-pdf.mjs "${{ github.event.inputs.url }}" "${{ github.event.inputs.filename }}"
+          node make-mobile-pdf.mjs "${{ github.event.inputs.url }}" "docs/jobs/${{ github.event.inputs.jobId }}.pdf"
 
-      - name: Upload PDF
-        uses: actions/upload-artifact@v4
-        with:
-          name: pdf
-          path: ${{ github.event.inputs.filename }}
+      - name: Mark job done
+        run: |
+          echo "{\"status\":\"done\",\"pdf\":\"/jobs/${{ github.event.inputs.jobId }}.pdf\",\"jobId\":\"${{ github.event.inputs.jobId }}\"}" > "docs/jobs/${{ github.event.inputs.jobId }}.json"
+
+      - name: Commit outputs
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add docs/jobs
+          git commit -m "Render PDF ${{ github.event.inputs.jobId }}" || echo "No changes"
+          git push
